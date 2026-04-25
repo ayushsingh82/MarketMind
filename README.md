@@ -27,3 +27,26 @@ MarketMind is an intelligence-heavy concept: an AI analyst that explains market 
 npm install
 npm run dev
 ```
+
+## Backend API Scaffold
+
+- `POST /api/marketmind/ask`
+  - Request body:
+    - `{ "query": "Why is BTC falling?" }`
+  - Fetches:
+    - `/feeds/news`
+    - `/currency/market-snapshot`
+    - `/macro/events`
+  - Returns:
+    - `summary`
+    - `causes`
+    - `impact`
+    - `confidence`
+    - `suggestions`
+
+## Environment
+
+```bash
+SOSO_API_KEY=your_key_here
+SOSO_BASE_URL=https://openapi.sosovalue.com/openapi/v1
+```
