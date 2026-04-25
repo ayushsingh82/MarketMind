@@ -1,4 +1,5 @@
 import MarketMindLayout from "../components/MarketMindLayout";
+import MarketMindChartCard from "../components/MarketMindChartCard";
 
 export default function InsightsPage() {
   return (
@@ -31,6 +32,15 @@ export default function InsightsPage() {
           <div className="border border-zinc-700 bg-black p-3">Sector shift: AI overtook DeFi flows</div>
           <div className="border border-zinc-700 bg-black p-3">Macro alert: Fed commentary in 3h</div>
         </div>
+      </section>
+
+      <section className="border border-orange-500/60 bg-zinc-950 p-5 md:col-span-2">
+        <h2 className="mb-3 text-lg font-semibold text-orange-300">Sentiment Chart</h2>
+        <MarketMindChartCard
+          title="Bullish vs Bearish Trend"
+          type="line"
+          note="Line/area sentiment trend generated from processed news signals."
+        />
       </section>
     </MarketMindLayout>
   );

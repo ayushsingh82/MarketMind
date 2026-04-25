@@ -1,4 +1,5 @@
 import MarketMindLayout from "./components/MarketMindLayout";
+import MarketMindChartCard from "./components/MarketMindChartCard";
 
 export default function Home() {
   return (
@@ -12,6 +13,13 @@ export default function Home() {
           <div className="border border-zinc-700 bg-black p-3">BTC: -1.8% · ETH: +2.4% · SV Index: +0.9%</div>
           <div className="border border-zinc-700 bg-black p-3">Top gainers: RNDR, FET, INJ</div>
           <div className="border border-zinc-700 bg-black p-3">Top losers: DOGE, AVAX, LINK</div>
+        </div>
+        <div className="mt-3">
+          <MarketMindChartCard
+            title="Market Overview Chart"
+            type="multiline"
+            note="BTC, ETH, and index movement in one comparative view."
+          />
         </div>
       </section>
 

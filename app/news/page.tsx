@@ -1,4 +1,5 @@
 import MarketMindLayout from "../components/MarketMindLayout";
+import MarketMindChartCard from "../components/MarketMindChartCard";
 
 export default function NewsPage() {
   return (
@@ -38,6 +39,15 @@ export default function NewsPage() {
           <div className="border border-zinc-700 bg-black p-3">BTC, ETH, SOL</div>
           <div className="border border-zinc-700 bg-black p-3">FET, RNDR, TAO</div>
         </div>
+      </section>
+
+      <section className="border border-orange-500/60 bg-zinc-950 p-5 md:col-span-2">
+        <h2 className="mb-3 text-lg font-semibold text-orange-300">News Impact Visualization</h2>
+        <MarketMindChartCard
+          title="News-to-Price Timeline"
+          type="timeline"
+          note="Maps news timestamps to corresponding price movement windows."
+        />
       </section>
     </MarketMindLayout>
   );

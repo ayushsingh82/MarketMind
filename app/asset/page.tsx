@@ -1,13 +1,16 @@
 import MarketMindLayout from "../components/MarketMindLayout";
+import MarketMindChartCard from "../components/MarketMindChartCard";
 
 export default function AssetPage() {
   return (
     <MarketMindLayout title="Asset Analysis" subtitle="Deep dive into one asset">
       <section className="border border-orange-500/60 bg-zinc-950 p-5">
         <h2 className="mb-3 text-lg font-semibold text-orange-300">Price + Chart</h2>
-        <div className="border border-zinc-700 bg-black p-4 text-sm text-zinc-400">
-          ETH price action chart placeholder
-        </div>
+        <MarketMindChartCard
+          title="Asset Deep Dive"
+          type="candlestick"
+          note="Candlestick + volume view from /currency/historical-klines."
+        />
       </section>
 
       <section className="border border-orange-500/60 bg-zinc-950 p-5">
