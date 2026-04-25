@@ -1,4 +1,4 @@
-# MarketMind (`soso2`)
+# MarketMind 
 
 MarketMind is an intelligence-heavy concept: an AI analyst that explains market moves using SoSoValue data and clear reasoning without auto-trading.
 
