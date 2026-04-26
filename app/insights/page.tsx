@@ -17,7 +17,7 @@ export default function InsightsPage() {
         <h2 className="mb-3 text-lg font-semibold text-orange-300">Insights for You</h2>
         <div className="space-y-2 text-sm">
           <div className="border border-zinc-700 bg-black p-3">
-            BTC in watchlist is sensitive to tomorrow's CPI print.
+            BTC in watchlist is sensitive to tomorrow&apos;s CPI print.
           </div>
           <div className="border border-zinc-700 bg-black p-3">
             ETH is showing stronger institutional flow than peers.
