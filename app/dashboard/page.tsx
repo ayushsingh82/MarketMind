@@ -4,6 +4,27 @@ import MarketMindLayout from "../components/MarketMindLayout";
 export default function DashboardPage() {
   return (
     <MarketMindLayout title="Market Intelligence Panel" subtitle="Overview, insights, and explainable trends">
+      <section className="border border-zinc-800 bg-[#141414] p-5 md:col-span-2">
+        <div className="grid gap-3 text-sm md:grid-cols-4">
+          <div className="border border-zinc-700 bg-black p-3">
+            <p className="text-zinc-500">Market Regime</p>
+            <p className="text-xl font-semibold">Risk-On</p>
+          </div>
+          <div className="border border-zinc-700 bg-black p-3">
+            <p className="text-zinc-500">Signal Confidence</p>
+            <p className="text-xl font-semibold text-orange-300">81%</p>
+          </div>
+          <div className="border border-zinc-700 bg-black p-3">
+            <p className="text-zinc-500">Macro Risk</p>
+            <p className="text-xl font-semibold">Moderate</p>
+          </div>
+          <div className="border border-zinc-700 bg-black p-3">
+            <p className="text-zinc-500">News Velocity</p>
+            <p className="text-xl font-semibold">High</p>
+          </div>
+        </div>
+      </section>
+
       <section className="border border-zinc-800 bg-[#141414] p-5">
         <h2 className="mb-3 text-lg font-semibold text-orange-300">Market Summary</h2>
         <div className="space-y-2 text-sm">
@@ -46,6 +67,24 @@ export default function DashboardPage() {
           title="Bullish vs Bearish"
           type="line"
           note="Sentiment balance over rolling windows."
+        />
+      </section>
+
+      <section className="border border-zinc-800 bg-[#141414] p-5">
+        <h2 className="mb-3 text-lg font-semibold text-orange-300">Sector Heatmap</h2>
+        <MarketMindChartCard
+          title="Sector Strength Matrix"
+          type="heatmap"
+          note="L2Beat-style analytical view of sector strength and persistence."
+        />
+      </section>
+
+      <section className="border border-zinc-800 bg-[#141414] p-5">
+        <h2 className="mb-3 text-lg font-semibold text-orange-300">Correlation Cluster</h2>
+        <MarketMindChartCard
+          title="Asset Correlation Scatter"
+          type="correlation"
+          note="Tracks cross-asset co-movement in current regime."
         />
       </section>
     </MarketMindLayout>

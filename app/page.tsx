@@ -53,6 +53,25 @@ export default function Home() {
             <p className="mt-2 text-sm">Watchlist-aware alerts and insights for faster decisions.</p>
           </div>
         </section>
+
+        <section className="grid w-full gap-3 md:grid-cols-4">
+          <div className="border border-zinc-800 bg-[#141414] p-4 text-left">
+            <p className="text-xs text-zinc-500">Assets Tracked</p>
+            <p className="mt-1 text-xl font-semibold text-orange-300">182</p>
+          </div>
+          <div className="border border-zinc-800 bg-[#141414] p-4 text-left">
+            <p className="text-xs text-zinc-500">News Signals Daily</p>
+            <p className="mt-1 text-xl font-semibold text-orange-300">2.4K</p>
+          </div>
+          <div className="border border-zinc-800 bg-[#141414] p-4 text-left">
+            <p className="text-xs text-zinc-500">Contradictions Flagged</p>
+            <p className="mt-1 text-xl font-semibold text-orange-300">67</p>
+          </div>
+          <div className="border border-zinc-800 bg-[#141414] p-4 text-left">
+            <p className="text-xs text-zinc-500">Model Confidence</p>
+            <p className="mt-1 text-xl font-semibold text-orange-300">81%</p>
+          </div>
+        </section>
       </div>
     </div>
   );
