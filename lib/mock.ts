@@ -11,6 +11,7 @@ import type {
   WatchlistItem,
 } from "./types";
 import type { MacroEvent, NewsItem, SectorSpotlightItem } from "./sosovalue";
+import type { Orderbook, SodexTicker, SodexTrade } from "./sodex";
 
 // Deterministic time-bucketed generators. The seed advances every minute or
 // hour, so panels feel alive across reloads while remaining reproducible
@@ -528,6 +529,233 @@ export function buildMacroEvents(): MacroEvent[] {
       category: "jobs",
       scheduledAt: now + 30 * HOUR_MS,
       importance: "medium",
+    },
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// SoDEX read-only intelligence mocks. MarketMind reads order-book microstructure
+// purely as a signal — spread, depth imbalance, taker bias — never to trade.
+// ---------------------------------------------------------------------------
+
+const SODEX_PAIRS = ["BTC-USDT", "ETH-USDT", "SOL-USDT", "ARB-USDT", "FET-USDT"];
+
+function refPriceFor(symbol: string): number {
+  if (symbol.startsWith("BTC")) return 62000;
+  if (symbol.startsWith("ETH")) return 3050;
+  if (symbol.startsWith("SOL")) return 142;
+  if (symbol.startsWith("ARB")) return 0.92;
+  if (symbol.startsWith("FET")) return 1.42;
+  return 100;
+}
+
+export function buildOrderbook(symbol = "ETH-USDT"): Orderbook {
+  const rand = mulberry32(bucketSeed(MIN_MS) ^ hashString(symbol));
+  const ref = refPriceFor(symbol);
+  const tick = ref < 5 ? 0.0005 : ref < 200 ? 0.05 : 1;
+  const bids: { price: number; size: number }[] = [];
+  const asks: { price: number; size: number }[] = [];
+  for (let i = 1; i <= 8; i++) {
+    bids.push({
+      price: round(ref - tick * i, ref < 5 ? 4 : 2),
+      size: round(0.4 + rand() * 5.2, 3),
+    });
+    asks.push({
+      price: round(ref + tick * i, ref < 5 ? 4 : 2),
+      size: round(0.4 + rand() * 5.2, 3),
+    });
+  }
+  const bidDepth = bids.reduce((s, b) => s + b.size, 0);
+  const askDepth = asks.reduce((s, a) => s + a.size, 0);
+  const depthImbalance = round((bidDepth - askDepth) / (bidDepth + askDepth), 3);
+  const spreadBps = round(((asks[0].price - bids[0].price) / ref) * 10_000, 1);
+  return { symbol, bids, asks, spreadBps, depthImbalance };
+}
+
+export function buildSodexTicker(symbol = "ETH-USDT"): SodexTicker {
+  const rand = mulberry32(bucketSeed(MIN_MS) ^ hashString(symbol));
+  const ref = refPriceFor(symbol);
+  const change24h = round((rand() - 0.45) * 6, 2);
+  return {
+    symbol,
+    last: round(ref * (1 + change24h / 100), ref < 5 ? 4 : 2),
+    change24h,
+    volume24h: round(2_000_000 + rand() * 80_000_000, 0),
+    takerBuyRatio: round(0.46 + (rand() - 0.5) * 0.16, 3),
+  };
+}
+
+export function buildSodexTickers(): SodexTicker[] {
+  return SODEX_PAIRS.map((p) => buildSodexTicker(p));
+}
+
+export function buildSodexTrades(symbol = "ETH-USDT", count = 24): SodexTrade[] {
+  const rand = mulberry32(bucketSeed(MIN_MS) ^ hashString(symbol));
+  const ref = refPriceFor(symbol);
+  const out: SodexTrade[] = [];
+  const now = Date.now();
+  for (let i = 0; i < count; i++) {
+    out.push({
+      id: `tr_${now - i * 7_000}_${symbol}`,
+      symbol,
+      side: rand() > 0.52 ? "BUY" : "SELL",
+      price: round(ref * (1 + (rand() - 0.5) * 0.004), ref < 5 ? 4 : 2),
+      size: round(0.05 + rand() * 1.6, 3),
+      ts: now - i * 7_000,
+    });
+  }
+  return out;
+}
+
+export type SodexFlow = {
+  symbol: string;
+  takerBuyRatio: number;
+  spreadBps: number;
+  depthImbalance: number;
+  netFlow1m: number;
+  signal: "absorbing-bids" | "absorbing-offers" | "balanced" | "thin";
+  note: string;
+};
+
+export function buildSodexFlow(): SodexFlow[] {
+  const rand = mulberry32(bucketSeed(MIN_MS));
+  return SODEX_PAIRS.map((symbol) => {
+    const ob = buildOrderbook(symbol);
+    const ticker = buildSodexTicker(symbol);
+    const netFlow1m = round((rand() - 0.45) * 1_400_000, 0);
+    const signal: SodexFlow["signal"] =
+      ob.spreadBps > 12
+        ? "thin"
+        : ticker.takerBuyRatio > 0.55
+          ? "absorbing-offers"
+          : ticker.takerBuyRatio < 0.45
+            ? "absorbing-bids"
+            : "balanced";
+    const note =
+      signal === "absorbing-offers"
+        ? "Taker-buy share dominant; passive sellers being lifted."
+        : signal === "absorbing-bids"
+          ? "Taker-sell share dominant; passive buyers being hit."
+          : signal === "thin"
+            ? "Spread wide vs. baseline — liquidity thinning, treat fills as expensive."
+            : "Two-way flow; no directional microstructure tell.";
+    return {
+      symbol,
+      takerBuyRatio: ticker.takerBuyRatio,
+      spreadBps: ob.spreadBps,
+      depthImbalance: ob.depthImbalance,
+      netFlow1m,
+      signal,
+      note,
+    };
+  });
+}
+
+function hashString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (h << 5) - h + s.charCodeAt(i);
+    h |= 0;
+  }
+  return h >>> 0;
+}
+
+// ---------------------------------------------------------------------------
+// Staking + SSI Protocol intelligence mocks.
+// SSI = SoSoValue's on-chain spot index protocol; we surface index basket
+// composition + drift as a research/insight signal.
+// ---------------------------------------------------------------------------
+
+export type StakingYield = {
+  asset: string;
+  protocol: string;
+  apy: number;
+  apy7dDelta: number;
+  tvlUsd: number;
+  riskTier: "low" | "moderate" | "elevated";
+  note: string;
+};
+
+export function buildStakingYields(): StakingYield[] {
+  const rand = mulberry32(bucketSeed(HOUR_MS));
+  const base: Omit<StakingYield, "apy7dDelta" | "apy" | "tvlUsd">[] = [
+    { asset: "ETH", protocol: "Native staking", riskTier: "low", note: "Validator queue cleared; entry latency improving." },
+    { asset: "ETH", protocol: "Lido (stETH)", riskTier: "moderate", note: "Liquid staking peg held through last vol pulse." },
+    { asset: "ETH", protocol: "EigenLayer restake", riskTier: "elevated", note: "Restaking risk premium widened with TVL inflows." },
+    { asset: "SOL", protocol: "Native staking", riskTier: "low", note: "Validator commission landscape stable." },
+    { asset: "SOL", protocol: "Marinade (mSOL)", riskTier: "moderate", note: "Liquid staking ratio tightening vs native." },
+    { asset: "BTC", protocol: "Babylon BTC restake", riskTier: "elevated", note: "Early-stage restaking yield, shallow withdrawal liquidity." },
+  ];
+  return base.map((b) => {
+    const apy = round(2.4 + rand() * 7.6, 2);
+    return {
+      ...b,
+      apy,
+      apy7dDelta: round((rand() - 0.5) * 0.8, 2),
+      tvlUsd: round(800_000_000 + rand() * 30_000_000_000, 0),
+    };
+  });
+}
+
+export type SsiBasketWeight = {
+  symbol: string;
+  weight: number;
+  drift7d: number; // pp drift vs target
+  contribution24h: number; // % contribution to index move
+};
+
+export type SsiIndex = {
+  index: string;
+  level: number;
+  change24h: number;
+  drift: number; // composite drift score
+  rebalanceWindow: string;
+  basket: SsiBasketWeight[];
+};
+
+export function buildSsiIndices(): SsiIndex[] {
+  const rand = mulberry32(bucketSeed(HOUR_MS));
+  return [
+    {
+      index: "SSI-L1",
+      level: round(102 + (rand() - 0.5) * 4, 2),
+      change24h: round((rand() - 0.45) * 4, 2),
+      drift: round(rand() * 2.4, 2),
+      rebalanceWindow: "T+18h",
+      basket: [
+        { symbol: "BTC", weight: 48, drift7d: round((rand() - 0.5) * 1.2, 2), contribution24h: round((rand() - 0.5) * 1.6, 2) },
+        { symbol: "ETH", weight: 28, drift7d: round((rand() - 0.5) * 1.0, 2), contribution24h: round((rand() - 0.5) * 1.6, 2) },
+        { symbol: "SOL", weight: 14, drift7d: round((rand() - 0.5) * 1.4, 2), contribution24h: round((rand() - 0.5) * 1.6, 2) },
+        { symbol: "AVAX", weight: 10, drift7d: round((rand() - 0.5) * 1.2, 2), contribution24h: round((rand() - 0.5) * 1.6, 2) },
+      ],
+    },
+    {
+      index: "SSI-AI",
+      level: round(118 + (rand() - 0.5) * 6, 2),
+      change24h: round((rand() - 0.4) * 7, 2),
+      drift: round(rand() * 3.4, 2),
+      rebalanceWindow: "T+42h",
+      basket: [
+        { symbol: "TAO", weight: 32, drift7d: round((rand() - 0.5) * 2.4, 2), contribution24h: round((rand() - 0.5) * 2.4, 2) },
+        { symbol: "FET", weight: 26, drift7d: round((rand() - 0.5) * 2.4, 2), contribution24h: round((rand() - 0.5) * 2.4, 2) },
+        { symbol: "RNDR", weight: 22, drift7d: round((rand() - 0.5) * 2.4, 2), contribution24h: round((rand() - 0.5) * 2.4, 2) },
+        { symbol: "WLD", weight: 12, drift7d: round((rand() - 0.5) * 2.4, 2), contribution24h: round((rand() - 0.5) * 2.4, 2) },
+        { symbol: "AGIX", weight: 8, drift7d: round((rand() - 0.5) * 2.4, 2), contribution24h: round((rand() - 0.5) * 2.4, 2) },
+      ],
+    },
+    {
+      index: "SSI-DeFi",
+      level: round(94 + (rand() - 0.5) * 5, 2),
+      change24h: round((rand() - 0.55) * 4, 2),
+      drift: round(rand() * 2.0, 2),
+      rebalanceWindow: "T+66h",
+      basket: [
+        { symbol: "AAVE", weight: 30, drift7d: round((rand() - 0.5) * 1.4, 2), contribution24h: round((rand() - 0.5) * 1.8, 2) },
+        { symbol: "UNI", weight: 26, drift7d: round((rand() - 0.5) * 1.4, 2), contribution24h: round((rand() - 0.5) * 1.8, 2) },
+        { symbol: "MKR", weight: 22, drift7d: round((rand() - 0.5) * 1.4, 2), contribution24h: round((rand() - 0.5) * 1.8, 2) },
+        { symbol: "LDO", weight: 14, drift7d: round((rand() - 0.5) * 1.4, 2), contribution24h: round((rand() - 0.5) * 1.8, 2) },
+        { symbol: "CRV", weight: 8, drift7d: round((rand() - 0.5) * 1.4, 2), contribution24h: round((rand() - 0.5) * 1.8, 2) },
+      ],
     },
   ];
 }
