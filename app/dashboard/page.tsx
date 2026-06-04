@@ -51,6 +51,23 @@ type SsiData = {
   }[];
 };
 
+type EtfSummary = {
+  symbol: string;
+  label: string;
+  latestNetInflow: number;
+  cum5d: number;
+  streak: number;
+  series: { date: string; netInflow: number; cumInflow: number }[];
+};
+
+function fmtFlow(n: number) {
+  const sign = n > 0 ? "+" : n < 0 ? "-" : "";
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(1)}M`;
+  return `${sign}$${abs.toLocaleString()}`;
+}
+
 const axis = { tick: { fill: "#71717a", fontSize: 10 }, axisLine: false, tickLine: false };
 
 export default function DashboardPage() {
@@ -63,6 +80,7 @@ export default function DashboardPage() {
   const sectors = useLiveData<SectorSpotlightItem[]>("/api/marketmind/sectors", 10000);
   const sodex = useLiveData<SodexData>("/api/marketmind/sodex", 6000);
   const ssi = useLiveData<SsiData>("/api/marketmind/ssi", 13000);
+  const etf = useLiveData<EtfSummary[]>("/api/marketmind/etf", 15000);
 
   return (
     <MarketMindLayout title="00 · intelligence-board" subtitle="Cause-Effect Intelligence">
@@ -338,6 +356,50 @@ export default function DashboardPage() {
               })}
             </tbody>
           </table>
+        </div>
+      </Panel>
+
+      {/* ETF flows — real net inflows/outflows */}
+      <Panel
+        title="G2 · ETF flows"
+        subtitle="Spot BTC/ETH net inflows (USD) · 5d cumulative · streak"
+        status={etf.status}
+        source={etf.source}
+        updatedAt={etf.updatedAt}
+        className="md:col-span-3"
+      >
+        <div className="space-y-3">
+          {(etf.data ?? []).map((e) => (
+            <div key={e.symbol} className="rounded-sm border border-zinc-800/80 bg-[#0c0c0e] p-3">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xs text-zinc-100">{e.label}</span>
+                <span className={`font-mono text-sm tabular-nums ${e.latestNetInflow >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                  {fmtFlow(e.latestNetInflow)}
+                </span>
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[10px] text-zinc-500">
+                <span>5d cum {fmtFlow(e.cum5d)}</span>
+                <span className={e.streak >= 0 ? "text-emerald-300" : "text-rose-300"}>
+                  {Math.abs(e.streak)}d {e.streak >= 0 ? "inflow" : "outflow"} streak
+                </span>
+              </div>
+              <div className="mt-2 flex h-8 items-end gap-0.5">
+                {e.series.map((p) => {
+                  const max = Math.max(...e.series.map((x) => Math.abs(x.netInflow)), 1);
+                  const h = Math.max(2, (Math.abs(p.netInflow) / max) * 100);
+                  return (
+                    <div
+                      key={p.date}
+                      title={`${p.date}: ${fmtFlow(p.netInflow)}`}
+                      className={`flex-1 rounded-sm ${p.netInflow >= 0 ? "bg-emerald-400/50" : "bg-rose-400/50"}`}
+                      style={{ height: `${h}%` }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          {!etf.data ? <p className="text-xs text-zinc-500">Loading ETF flows…</p> : null}
         </div>
       </Panel>
 

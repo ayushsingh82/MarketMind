@@ -20,6 +20,7 @@ type SodexData = {
     spreadBps: number;
     depthImbalance: number;
     netFlow1m: number;
+    fundingRate?: number;
     signal: "absorbing-bids" | "absorbing-offers" | "balanced" | "thin";
     note: string;
   }[];
@@ -102,6 +103,14 @@ export default function SodexFlowPage() {
                   {p.depthImbalance.toFixed(2)}
                 </span>
               </div>
+              {p.fundingRate != null ? (
+                <div className="mt-1 flex items-end justify-between font-mono text-[11px]">
+                  <span className="text-zinc-500">fund</span>
+                  <span className={`tabular-nums ${p.fundingRate > 0 ? "text-emerald-300" : p.fundingRate < 0 ? "text-rose-300" : "text-zinc-200"}`}>
+                    {(p.fundingRate * 100).toFixed(4)}%
+                  </span>
+                </div>
+              ) : null}
             </button>
           ))}
         </div>

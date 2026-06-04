@@ -277,42 +277,40 @@ export function buildSectorSpotlight(): SectorSpotlightItem[] {
   });
 }
 
+// Offline-preview contradictions.
+//
+// NOTE: the prior hardcoded entries (fabricated funding/CPI/dominance numbers)
+// were removed in Wave 2 — they cited fake data and overclaimed. The REAL
+// cross-source detector lives in lib/marketmind.ts (detectContradictions),
+// which computes contradictions from live SoSoValue + SoDEX surfaces.
+//
+// This function now derives a single, honest contradiction from the SAME
+// deterministic mock that drives the rest of the offline demo: it compares the
+// mock news bias against the mock sector breadth. When they disagree it emits
+// one flag; otherwise it returns none. No invented funding/CPI/dominance figures.
 export function buildContradictions(): Contradiction[] {
   const now = Date.now();
-  return [
-    {
-      id: `contra_${now - 4 * MIN_MS}`,
-      title: "News flow bullish on ETH, derivatives flow bearish",
-      signalA: { label: "News conviction", value: "+71", source: "SoSoValue news" },
-      signalB: { label: "Funding rate (8h)", value: "-0.018%", source: "SoSoValue derivatives" },
+  const news = buildNewsImpacts(8);
+  const sectors = buildSectorSpotlight();
+  const bull = news.filter((n) => n.sentiment === "bullish").length;
+  const bear = news.filter((n) => n.sentiment === "bearish").length;
+  const newsBias = bull - bear;
+  const breadth = sectors.reduce((acc, s) => acc + (s.change24h > 0 ? 1 : -1), 0);
+
+  const out: Contradiction[] = [];
+  if (newsBias !== 0 && Math.sign(breadth) !== Math.sign(newsBias)) {
+    out.push({
+      id: `contra_preview_${now}`,
+      title: "News bias and sector breadth disagree (offline preview)",
+      signalA: { label: "News bias", value: `${newsBias >= 0 ? "+" : ""}${newsBias}`, source: "mock news" },
+      signalB: { label: "Sector breadth", value: `${breadth >= 0 ? "+" : ""}${breadth} sectors`, source: "mock sectors" },
       severity: "medium",
-      confidence: 78,
-      resolution:
-        "Short positioning is fading the headline rally; watch funding flip before sizing up.",
-      detectedAt: now - 4 * MIN_MS,
-    },
-    {
-      id: `contra_${now - 11 * MIN_MS}`,
-      title: "Sector rotation says risk-on, macro calendar says risk-off",
-      signalA: { label: "Sector breadth", value: "+62%", source: "SoSoValue sectors" },
-      signalB: { label: "CPI window", value: "T-9h", source: "SoSoValue macro" },
-      severity: "high",
-      confidence: 84,
-      resolution:
-        "Pre-event rallies often unwind; treat AI breadth as tactical, not regime change, until macro clears.",
-      detectedAt: now - 11 * MIN_MS,
-    },
-    {
-      id: `contra_${now - 26 * MIN_MS}`,
-      title: "BTC dominance flat, but L1 alts still bid",
-      signalA: { label: "BTC dominance", value: "53.2% (Δ 0.0)", source: "SoSoValue index" },
-      signalB: { label: "L1 alt breadth", value: "+5.4%", source: "SoSoValue sectors" },
-      severity: "low",
-      confidence: 64,
-      resolution: "Normal rotation cadence — alt strength can persist while dominance is stable.",
-      detectedAt: now - 26 * MIN_MS,
-    },
-  ];
+      confidence: 70,
+      resolution: "Offline preview — connect SoSoValue + SoDEX keys for live cross-source detection.",
+      detectedAt: now,
+    });
+  }
+  return out;
 }
 
 export function buildNarratives(): NarrativeMomentum[] {

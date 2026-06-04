@@ -1,44 +1,25 @@
 import { NextResponse } from "next/server";
-import { buildSsiIndices } from "@/lib/mock";
-import { getIndexMarketSnapshot, hasSosoKey } from "@/lib/sosovalue";
+import { buildLiveSsiIndices, buildMarketMindIndex } from "@/lib/ssi";
 
 export const runtime = "nodejs";
 export const revalidate = 0;
 
 // SSI Protocol = SoSoValue's on-chain spot index protocol.
-// MarketMind surfaces SSI baskets + drift as research context. We never
-// rebalance — we explain what the index is doing and why.
+// MarketMind surfaces SSI baskets + drift as research context (read-only) and
+// publishes its OWN computed methodology index (MMX) alongside for comparison.
+// We never rebalance an on-chain index — we explain and we compute.
 
 export async function GET() {
-  const fallback = buildSsiIndices();
-
-  if (hasSosoKey()) {
-    try {
-      const live = await getIndexMarketSnapshot();
-      const livePoints = live.data?.length ?? 0;
-      return NextResponse.json({
-        ok: true,
-        data: {
-          indices: fallback,
-          livePoints,
-        },
-        source: "SoSoValue/index-market-snapshot + internal/basket-explainer",
-        generatedAt: Date.now(),
-      });
-    } catch (err) {
-      return NextResponse.json({
-        ok: true,
-        data: { indices: fallback, livePoints: 0 },
-        source: `SSI (fallback: ${(err as Error).message.slice(0, 80)})`,
-        generatedAt: Date.now(),
-      });
-    }
-  }
+  const [ssi, mmx] = await Promise.all([buildLiveSsiIndices(), buildMarketMindIndex()]);
 
   return NextResponse.json({
     ok: true,
-    data: { indices: fallback, livePoints: 0 },
-    source: "SSI Protocol (offline preview)",
+    data: {
+      indices: ssi.indices,
+      livePoints: ssi.livePoints,
+      mmx,
+    },
+    source: `${ssi.source}; ${mmx.source}`,
     generatedAt: Date.now(),
   });
 }
