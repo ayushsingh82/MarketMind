@@ -1,28 +1,51 @@
-# Wave 3 — SHIPPED so far
+# Wave 3 — SHIPPED (changelog)
 
-**Ask Market is now LIVE by default — the Wave 2 "LLM built but never run
-end-to-end" caveat is closed.** `lib/llm.ts` gained a second provider: an
-OpenAI-compatible endpoint (a self-hosted vLLM server running
-`Qwen/Qwen3-VL-8B-Instruct` behind a RunPod proxy) that needs no key, so
-Ask Market reasons with a real grounded model out of the box. Anthropic Claude
-is still used automatically when `ANTHROPIC_API_KEY` is set (with prompt
-caching). Everything is env-overridable (`OPENAI_BASE_URL` / `OPENAI_MODEL` /
-`OPENAI_API_KEY`, or the `AI_*` aliases). On any endpoint error the engine falls
-back to the deterministic templated analysis, so a dead pod never hard-fails.
+This wave took MarketMind from a mock-data, never-run-end-to-end prototype to a
+**live intelligence engine**: real SoSoValue feeds explained by a real AI model,
+running with zero configuration.
 
-- **NEW — AI Market Brief.** `/api/marketmind/brief` (via
-  `runMarketMindBrief()`) generates a live 2-3 sentence tape read — what's
-  driving crypto, the clearest cross-source signal/disagreement, one thing to
-  watch — grounded in the same news / sector / macro / market context. Cached
-  server-side (~90s) and surfaced as a full-width card on `/dashboard`. Verified
-  end-to-end against the live model.
-- **Provider-aware health.** `/api/marketmind/health` reports the active LLM
-  provider label.
+## 1. Live SoSoValue API integration (was mock-by-default)
+`lib/sosovalue.ts` was rewritten against the **verified** SoSoValue OpenAPI v1,
+normalizing the live `{ code, message, data }` snake_case responses (24h change
+is a fraction → converted to %). Endpoints fixed to the real spec:
+- `/currencies/sector-spotlight` (`data.sector`, not `data.sectors`) — live
+  sector breadth.
+- `/news` (`page_size`, `data.list`) — live news feed with real sources.
+- `/currencies/{id}/market-snapshot` via a cached symbol→`currency_id` map —
+  live prices for the MMX board (BTC/ETH/SOL/BNB/XRP/DOGE).
+- `/etfs/summary-history` (`symbol` + `country_code`; legacy `us-*-spot` form
+  parsed) — live BTC/ETH spot-ETF net inflow, streaks, cumulative.
+- `/macro/events` — live macro calendar, flattened + classified (CPI/PPI →
+  inflation, FOMC → rate, NFP → jobs …).
+- `/indices` + `/indices/{ticker}/constituents` + `/indices/{ticker}/market-snapshot`
+  — live SSI baskets and weights for the SSI/MMX comparison.
 
-Verified live: Ask Market returns `source: vLLM/Qwen/Qwen3-VL-8B-Instruct
-(grounded)` structured JSON; the brief is grounded in the current feeds.
-Ephemeral-endpoint caveat: RunPod proxy URLs rotate — set `OPENAI_BASE_URL`
-(or an Anthropic key) for a permanent deployment.
+**Rate discipline:** a server-side TTL cache (2–5 min) fronts every call so
+polling stays within the Demo plan's 10 req/min & 10k/mo limits. Intraday klines
+require a whitelisted key on this plan, so `getKlines` short-circuits (charts
+fall back to mock series, honestly labeled) to avoid wasted calls.
+
+## 2. Ask Market is LIVE — Qwen only (closes the Wave 2 caveat)
+The Wave 2 "LLM built but never run end-to-end" caveat is closed. `lib/llm.ts`
+now calls a self-hosted **vLLM server running `Qwen/Qwen3-VL-8B-Instruct`** and
+returns structured, grounded JSON. Verified end-to-end: Ask Market returns
+`source: vLLM/Qwen/Qwen3-VL-8B-Instruct (grounded)` with a thesis + causes +
+contradictions + confidence, citing the **live** news items. On any endpoint
+error it falls back to the deterministic templated analysis.
+
+## 3. NEW — AI Market Brief
+`/api/marketmind/brief` (via `runMarketMindBrief()`) generates a live 2–3
+sentence tape read — what's driving crypto, the clearest cross-source
+disagreement, one thing to watch — grounded in the current feeds. Cached ~90s,
+surfaced as a full-width card on `/dashboard`.
+
+## 4. Zero-config, push-to-deploy
+The SoSoValue key and the Qwen endpoint are **hardcoded**, so the app runs live
+on Vercel with no environment variables. The engine is Qwen-only — the Anthropic
+path was removed. `/api/marketmind/health` reports the active LLM provider.
+
+_(Demo-key note: the hardcoded SoSoValue key is a Demo-plan key — 10k calls/mo,
+no funds — intended for the judged demo.)_
 
 ---
 
