@@ -9,7 +9,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.100.1",
     "@react-three/fiber": "^9.6.1",
     "@react-three/postprocessing": "^3.0.4",
     "next": "16.2.4",
