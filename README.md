@@ -50,6 +50,8 @@ Most trading apps tell you **what** moved. The hard part is **why** — and whet
 
 **Zero setup. No API keys needed.** The app ships with a deterministic dataset that mirrors SoSoValue + SoDEX response shapes, so `npm run dev` just works.
 
+> **Wave 3 — Ask Market is live by default.** Ask Market and the new **AI Market Brief** (`/dashboard`) reason with a *real* grounded model out of the box — a self-hosted vLLM server running `Qwen/Qwen3-VL-8B-Instruct` via an OpenAI-compatible endpoint (`lib/llm.ts`), no key required. Set `ANTHROPIC_API_KEY` to use Claude instead (with prompt caching), or override the OpenAI-compatible endpoint with `OPENAI_BASE_URL` / `OPENAI_MODEL` / `OPENAI_API_KEY` (RunPod proxy URLs are ephemeral). Any endpoint error falls back to the deterministic templated analysis. See `WAVE3.md`.
+
 ```bash
 git clone https://github.com/ayushsingh82/MarketMind.git
 cd MarketMind

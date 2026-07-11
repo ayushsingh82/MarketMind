@@ -1,5 +1,6 @@
 "use client";
 
+import AIBriefCard from "../components/AIBriefCard";
 import MarketMindLayout from "../components/MarketMindLayout";
 import Panel from "../components/Panel";
 import Pulse from "../components/Pulse";
@@ -129,6 +130,9 @@ export default function DashboardPage() {
           />
         </div>
       </section>
+
+      {/* Wave 3 — live AI market brief grounded in the current feeds */}
+      <AIBriefCard className="md:col-span-6" />
 
       {/* Headline impact strip — horizontally scrollable, bento-style */}
       <Panel

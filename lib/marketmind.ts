@@ -18,7 +18,7 @@ import {
   takerBuyStats,
   toSodexPair,
 } from "./analytics";
-import { hasLlmKey, runMarketMindLLM, type LlmContext } from "./llm";
+import { generateBrief, hasLlmKey, runMarketMindLLM, type LlmContext } from "./llm";
 import type { AskResponse, Contradiction, NewsImpact } from "./types";
 
 // MarketMind intelligence engine.
@@ -121,6 +121,27 @@ export async function runMarketMindAnalysis(query: string): Promise<{ analysis: 
 
   // 2) Heuristic fallback (no LLM key).
   return heuristicAnalysis(query, tags, symbols, ctx);
+}
+
+// Wave 3 AI Market Brief — a live tape note grounded in the same context.
+// Falls back to a deterministic one-liner if the model is unreachable.
+export async function runMarketMindBrief(): Promise<{ brief: string; live: boolean; source: string }> {
+  const ctx = await gatherContext("market overview right now", []);
+  const { text, live, source } = await generateBrief(ctx);
+  if (live && text) return { brief: text, live: true, source };
+
+  // Deterministic fallback from the grounding data.
+  const up = ctx.sectors.filter((s) => s.change24h > 0).length;
+  const down = ctx.sectors.length - up;
+  const topNews = ctx.news[0]?.title ?? "no fresh headlines";
+  const breadth = ctx.sectors.length
+    ? `${up} up / ${down} down across sectors`
+    : "sector breadth unavailable";
+  return {
+    brief: `Tape read: ${breadth}. Lead headline — ${topNews}. Watch for cross-source disagreement between news tone and breadth before leaning either way.`,
+    live: false,
+    source: hasSosoKey() ? "heuristic tape brief (live data)" : "heuristic tape brief (offline preview)",
+  };
 }
 
 async function gatherContext(query: string, symbols: string[]): Promise<LlmContext> {

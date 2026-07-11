@@ -1,4 +1,32 @@
-# Wave 3 — Plan (not built)
+# Wave 3 — SHIPPED so far
+
+**Ask Market is now LIVE by default — the Wave 2 "LLM built but never run
+end-to-end" caveat is closed.** `lib/llm.ts` gained a second provider: an
+OpenAI-compatible endpoint (a self-hosted vLLM server running
+`Qwen/Qwen3-VL-8B-Instruct` behind a RunPod proxy) that needs no key, so
+Ask Market reasons with a real grounded model out of the box. Anthropic Claude
+is still used automatically when `ANTHROPIC_API_KEY` is set (with prompt
+caching). Everything is env-overridable (`OPENAI_BASE_URL` / `OPENAI_MODEL` /
+`OPENAI_API_KEY`, or the `AI_*` aliases). On any endpoint error the engine falls
+back to the deterministic templated analysis, so a dead pod never hard-fails.
+
+- **NEW — AI Market Brief.** `/api/marketmind/brief` (via
+  `runMarketMindBrief()`) generates a live 2-3 sentence tape read — what's
+  driving crypto, the clearest cross-source signal/disagreement, one thing to
+  watch — grounded in the same news / sector / macro / market context. Cached
+  server-side (~90s) and surfaced as a full-width card on `/dashboard`. Verified
+  end-to-end against the live model.
+- **Provider-aware health.** `/api/marketmind/health` reports the active LLM
+  provider label.
+
+Verified live: Ask Market returns `source: vLLM/Qwen/Qwen3-VL-8B-Instruct
+(grounded)` structured JSON; the brief is grounded in the current feeds.
+Ephemeral-endpoint caveat: RunPod proxy URLs rotate — set `OPENAI_BASE_URL`
+(or an Anthropic key) for a permanent deployment.
+
+---
+
+# Wave 3 — Plan (remaining, not built)
 
 Wave 2 made the intelligence real but stateless and single-shot. Wave 3 makes it
 *persistent, personalized, and temporal* — the engine should remember, adapt to a
