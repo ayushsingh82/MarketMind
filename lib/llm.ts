@@ -1,53 +1,27 @@
-// Real LLM layer for "Ask Market".
+// Real LLM layer for "Ask Market" + the AI Market Brief.
 //
-// Two providers, one signature:
-//   1. OpenAI-compatible endpoint (DEFAULT) — a self-hosted vLLM server running
-//      Qwen/Qwen3-VL-8B-Instruct behind a RunPod proxy. No key required, so the
-//      Ask Market path reasons with a REAL model out of the box (Wave 3 closes
-//      the Wave 2 "LLM built but never run end-to-end" caveat). Env-overridable
-//      because RunPod proxy URLs are ephemeral.
-//   2. Anthropic Claude — used only when ANTHROPIC_API_KEY is set, with prompt
-//      caching on the stable system + grounding prefix.
-//
-// Both return a STRUCTURED JSON object matching the AskResponse shape. On any
-// error marketmind.ts falls back to the deterministic templated analysis, so a
-// dead endpoint never hard-fails the app.
+// Single hardcoded provider: the self-hosted vLLM server running
+// Qwen/Qwen3-VL-8B-Instruct (the endpoint provided for this build). No env, no
+// OpenAI, no Anthropic — this endpoint only. Ask Market reasons with a real,
+// grounded model out of the box. On any endpoint error, marketmind.ts falls back
+// to the deterministic templated analysis so a dead endpoint never hard-fails.
 
-import Anthropic from "@anthropic-ai/sdk";
 import type { AskResponse } from "./types";
 
-const CLAUDE_MODEL = "claude-sonnet-4-6";
+const OAI_BASE_URL = "https://j197d3s4gy3ijy-8002.proxy.runpod.net/v1";
+const OAI_MODEL = "Qwen/Qwen3-VL-8B-Instruct";
+// The vLLM endpoint ignores the key; any non-empty value is fine.
+const OAI_API_KEY = "runpod-local";
 
-// OpenAI-compatible (vLLM/RunPod) defaults — the live, zero-config path.
-const DEFAULT_OAI_BASE_URL = "https://j197d3s4gy3ijy-8002.proxy.runpod.net/v1";
-const DEFAULT_OAI_MODEL = "Qwen/Qwen3-VL-8B-Instruct";
-
-const OAI_BASE_URL = process.env.OPENAI_BASE_URL || process.env.AI_BASE_URL || DEFAULT_OAI_BASE_URL;
-const OAI_MODEL = process.env.OPENAI_MODEL || process.env.AI_MODEL || DEFAULT_OAI_MODEL;
-// The vLLM endpoint ignores the key; keep a non-empty sentinel.
-const OAI_API_KEY = process.env.OPENAI_API_KEY || process.env.AI_API_KEY || "runpod-local";
-
-function useClaude(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
-}
-
-/**
- * Is any LLM available? With the Wave 3 baked-in OpenAI-compatible default this
- * is always true — the Ask Market path is live by default (Claude only when a
- * key is present). Liveness of the actual endpoint is handled by the caller's
- * try/catch, which falls back to the heuristic on error.
- */
+/** The LLM is always available (hardcoded endpoint). */
 export function hasLlmKey(): boolean {
   return true;
 }
 
-/** Human-readable label for the active provider, surfaced in /health + source tags. */
 export function llmProviderLabel(): string {
-  return useClaude() ? `Anthropic · ${CLAUDE_MODEL}` : `vLLM · ${OAI_MODEL}`;
+  return `vLLM · ${OAI_MODEL}`;
 }
 
-// Stable system prompt — frozen so it caches across requests (Claude path). No
-// timestamps, no per-request IDs here (those go in the user turn).
 const SYSTEM_PROMPT = `You are MarketMind, a read-only crypto market intelligence engine.
 
 Your job: explain WHY markets are moving, grounded ONLY in the structured data provided to you in the user turn. You never place trades and never give financial advice framed as a recommendation — you produce analysis a desk analyst would write, with explicit citations to the source data.
@@ -87,7 +61,6 @@ export type LlmResult = {
   usage?: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number };
 };
 
-// Build the large grounding block shared by both providers.
 function buildGroundingBlock(ctx: LlmContext): string {
   return [
     "GROUNDING DATA (use only this):",
@@ -109,165 +82,69 @@ function buildGroundingBlock(ctx: LlmContext): string {
   ].join("\n");
 }
 
-export async function runMarketMindLLM(ctx: LlmContext): Promise<LlmResult> {
-  return useClaude() ? runClaude(ctx) : runOpenAICompatible(ctx);
-}
-
-// --- OpenAI-compatible provider (vLLM / RunPod) — the default live path -------
-
-async function runOpenAICompatible(ctx: LlmContext): Promise<LlmResult> {
-  const groundingBlock = buildGroundingBlock(ctx);
-
+// Low-level chat call against the vLLM endpoint. Returns raw assistant text.
+async function chat(messages: { role: string; content: string }[], maxTokens: number): Promise<{ text: string; usage: { prompt_tokens?: number; completion_tokens?: number } }> {
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), 30_000);
   let res: Response;
   try {
     res = await fetch(`${OAI_BASE_URL}/chat/completions`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: OAI_MODEL,
-        temperature: 0.4,
-        max_tokens: 1600,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: `${groundingBlock}\n\nQUESTION: ${ctx.query}\n\nReturn the JSON object now.` },
-        ],
-      }),
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${OAI_API_KEY}` },
+      body: JSON.stringify({ model: OAI_MODEL, temperature: 0.4, max_tokens: maxTokens, messages }),
       signal: ctrl.signal,
     });
   } finally {
     clearTimeout(timeout);
   }
-
-  if (!res.ok) {
-    throw new Error(`vLLM ${res.status}: ${(await res.text()).slice(0, 120)}`);
-  }
-
+  if (!res.ok) throw new Error(`vLLM ${res.status}: ${(await res.text()).slice(0, 120)}`);
   const json = (await res.json()) as {
     choices?: { message?: { content?: string } }[];
     usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
-  const text = json.choices?.[0]?.message?.content ?? "";
+  return { text: json.choices?.[0]?.message?.content ?? "", usage: json.usage ?? {} };
+}
+
+export async function runMarketMindLLM(ctx: LlmContext): Promise<LlmResult> {
+  const grounding = buildGroundingBlock(ctx);
+  const { text, usage } = await chat(
+    [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: `${grounding}\n\nQUESTION: ${ctx.query}\n\nReturn the JSON object now.` },
+    ],
+    1600,
+  );
   const parsed = parseJsonObject(text);
   const analysis = coerceAnalysis(parsed, ctx);
-
   return {
     analysis,
     source: `vLLM/${OAI_MODEL} (grounded)`,
     usage: {
-      inputTokens: json.usage?.prompt_tokens ?? 0,
-      outputTokens: json.usage?.completion_tokens ?? 0,
+      inputTokens: usage.prompt_tokens ?? 0,
+      outputTokens: usage.completion_tokens ?? 0,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
     },
   };
 }
 
-// --- Anthropic Claude provider (opt-in via ANTHROPIC_API_KEY) -----------------
-
-let client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!client) client = new Anthropic();
-  return client;
-}
-
-async function runClaude(ctx: LlmContext): Promise<LlmResult> {
-  const anthropic = getClient();
-  const groundingBlock = buildGroundingBlock(ctx);
-
-  const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
-    max_tokens: 1600,
-    system: [
-      { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
-    ],
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "text", text: groundingBlock, cache_control: { type: "ephemeral" } },
-          { type: "text", text: `QUESTION: ${ctx.query}\n\nReturn the JSON object now.` },
-        ],
-      },
-    ],
-  });
-
-  const text = response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("");
-
-  const parsed = parseJsonObject(text);
-  const analysis = coerceAnalysis(parsed, ctx);
-
-  const u = response.usage;
-  return {
-    analysis,
-    source: `Anthropic/${CLAUDE_MODEL} (grounded, cached)`,
-    usage: {
-      inputTokens: u.input_tokens,
-      outputTokens: u.output_tokens,
-      cacheReadTokens: u.cache_read_input_tokens ?? 0,
-      cacheWriteTokens: u.cache_creation_input_tokens ?? 0,
-    },
-  };
-}
-
-// Wave 3 "AI Market Brief": a short plain-text tape note grounded in the same
-// context, for the dashboard header. Non-JSON, capped tokens. Returns live=false
-// (and empty text) on any error so the caller can fall back to a heuristic.
+// Short plain-text tape brief grounded in the same context (dashboard header).
 const BRIEF_SYSTEM = `You are MarketMind, a read-only crypto desk analyst. Ground every claim ONLY in the data provided. Never give trade recommendations. Write plain text, no headers, no bullet characters.`;
 
 export async function generateBrief(ctx: LlmContext): Promise<{ text: string; live: boolean; source: string }> {
   const grounding = buildGroundingBlock(ctx);
   const user = `${grounding}\n\nWrite a 2-3 sentence market tape brief: what is driving crypto right now, the single clearest cross-source signal or disagreement in the data, and one thing to watch next.`;
   try {
-    if (useClaude()) {
-      const anthropic = getClient();
-      const response = await anthropic.messages.create({
-        model: CLAUDE_MODEL,
-        max_tokens: 220,
-        system: BRIEF_SYSTEM,
-        messages: [{ role: "user", content: user }],
-      });
-      const text = response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .map((b) => b.text)
-        .join("")
-        .trim();
-      if (!text) return { text: "", live: false, source: "" };
-      return { text, live: true, source: `Anthropic/${CLAUDE_MODEL} (brief)` };
-    }
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 30_000);
-    let res: Response;
-    try {
-      res = await fetch(`${OAI_BASE_URL}/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${OAI_API_KEY}` },
-        body: JSON.stringify({
-          model: OAI_MODEL,
-          temperature: 0.5,
-          max_tokens: 220,
-          messages: [
-            { role: "system", content: BRIEF_SYSTEM },
-            { role: "user", content: user },
-          ],
-        }),
-        signal: ctrl.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
-    if (!res.ok) return { text: "", live: false, source: "" };
-    const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const text = (json.choices?.[0]?.message?.content ?? "").trim();
-    if (!text) return { text: "", live: false, source: "" };
-    return { text, live: true, source: `vLLM/${OAI_MODEL} (brief)` };
+    const { text } = await chat(
+      [
+        { role: "system", content: BRIEF_SYSTEM },
+        { role: "user", content: user },
+      ],
+      220,
+    );
+    const trimmed = text.trim();
+    if (!trimmed) return { text: "", live: false, source: "" };
+    return { text: trimmed, live: true, source: `vLLM/${OAI_MODEL} (brief)` };
   } catch {
     return { text: "", live: false, source: "" };
   }

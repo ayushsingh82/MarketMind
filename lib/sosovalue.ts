@@ -11,8 +11,9 @@
 // breaks the UI. Klines above 1d require a whitelisted key on this plan, so
 // getKlines short-circuits to a fallback WITHOUT spending a call.
 
-const SOSO_BASE_URL = process.env.SOSO_BASE_URL ?? "https://openapi.sosovalue.com/openapi/v1";
-const SOSO_API_KEY = process.env.SOSO_API_KEY;
+const SOSO_BASE_URL = "https://openapi.sosovalue.com/openapi/v1";
+// Hardcoded Demo key so the app runs live with zero config (no env on Vercel).
+const SOSO_API_KEY = "SOSO-ed3a4f77582943bab2b77556662acdb6";
 
 const SOSO_NEWS_PATH = process.env.SOSO_NEWS_PATH ?? "/news";
 const SOSO_SECTOR_PATH = process.env.SOSO_SECTOR_PATH ?? "/currencies/sector-spotlight";
